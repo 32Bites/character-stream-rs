@@ -1,6 +1,6 @@
 [package]
 name = "character-stream"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 author = "Noah Shanaberger <noah@thenoah.party>"
 description = "Helper data structures for reading UTF-8 characters from a stream."
@@ -8,7 +8,7 @@ license = "MIT"
 homepage = "https://github.com/32Bites/character-stream-rs"
 repository = "https://github.com/32Bites/character-stream-rs"
 readme = "README.md"
-keywords = ["utf8", "unicode", "stream", "reader", "wrapper"]
+keywords = ["iterator", "unicode", "stream", "reader", "wrapper"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

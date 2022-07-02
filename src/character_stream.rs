@@ -1,9 +1,11 @@
 use std::{
     error::Error,
     fs::File,
-    io::{BufRead, BufReader, Cursor, Seek, SeekFrom},
+    io::{BufRead, BufReader, Cursor, Seek, SeekFrom, Error as IoError},
     ops::{Deref, DerefMut},
 };
+
+use crate::CharacterIterator;
 
 /// The output type of a [CharacterStream]'s [read_char](CharacterStream::read_char) method.
 pub enum CharacterStreamResult {
@@ -74,7 +76,7 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     /// Upon success, a [`Vec<u8>`] is returned, holding the read bytes.
     /// 
     /// Upon failure, an [error](std::io::Error) is returned.
-    pub fn read_bytes(&mut self, up_to: usize) -> Result<Vec<u8>, std::io::Error> {
+    pub fn read_bytes(&mut self, up_to: usize) -> Result<Vec<u8>, IoError> {
         let mut buffer = vec![0u8; up_to];
         self.read_exact(&mut buffer)?;
 
@@ -84,7 +86,7 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     /// Does exactly what [read_bytes](Self::read_bytes) performs,
     /// the difference being it seeks back to the position before the read,
     /// serving as a lookahead function.
-    pub fn peek_bytes(&mut self, up_to: usize) -> Result<Vec<u8>, std::io::Error> {
+    pub fn peek_bytes(&mut self, up_to: usize) -> Result<Vec<u8>, IoError> {
         let current_position = self.stream_position()?;
         let bytes = self.read_bytes(up_to)?;
         self.seek(SeekFrom::Start(current_position))?;
@@ -92,14 +94,14 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     }
 
     /// Reads a singluar byte from the stream.
-    pub fn read_byte(&mut self) -> Result<u8, std::io::Error> {
+    pub fn read_byte(&mut self) -> Result<u8, IoError> {
         Ok(self.read_bytes(1)?[0])
     }
 
     /// Does exactly what [read_byte](Self::read_byte) performs,
     /// the difference being it seeks back to the position before the read,
     /// serving as a lookahead function.
-    pub fn peek_byte(&mut self) -> Result<u8, std::io::Error> {
+    pub fn peek_byte(&mut self) -> Result<u8, IoError> {
         Ok(self.peek_bytes(1)?[0])
     }
     
@@ -109,7 +111,7 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     /// If `is_lossy` is set to `true`, then invalid byte sequences will be a U+FFFD.
     /// 
     /// If `is_lossy` is set to `false`, then invalid byte sequences will be returned in addition to a parse error.
-    pub fn read_char(&mut self) -> Result<CharacterStreamResult, std::io::Error> {
+    pub fn read_char(&mut self) -> Result<CharacterStreamResult, IoError> {
         match self.read_byte() {
             Ok(read_byte) => match remaining_byte_count(read_byte) {
                 Some(remaining_count) => {
@@ -157,7 +159,7 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
 
     /// Performs the same action as [read_char](Self::read_char), the difference being,
     /// it seeks back to the position prior to the read.
-    pub fn peek_char(&mut self) -> Result<CharacterStreamResult, std::io::Error> {
+    pub fn peek_char(&mut self) -> Result<CharacterStreamResult, IoError> {
         let current_position = self.stream_position()?;
         let result = self.read_char();
         self.seek(SeekFrom::Start(current_position))?;
@@ -192,9 +194,21 @@ impl<Reader: BufRead + Seek> AsMut<Reader> for CharacterStream<Reader> {
     }
 }
 
+impl<Reader: BufRead + Seek> IntoIterator for CharacterStream<Reader> {
+    type Item = CharacterStreamResult;
+    type IntoIter = CharacterIterator<Reader>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        CharacterIterator::new(self)
+    }
+}
+
 /// Helper trait for converting values into a [CharacterStream].
 pub trait ToCharacterStream<Reader: BufRead + Seek> {
+    /// Convert into a [CharacterStream].
     fn to_character_stream(&self) -> CharacterStream<Reader>;
+
+    /// Convert into a lossy [CharacterStream].
     fn to_character_stream_lossy(&self) -> CharacterStream<Reader>;
 }
 
@@ -211,17 +225,20 @@ impl<T: AsRef<[u8]>> ToCharacterStream<Cursor<Vec<u8>>> for T {
 
 /// Helper trait for converting values into a [CharacterStream], with a potential for failure.
 pub trait TryToCharacterStream<Reader: BufRead + Seek> {
-    fn to_character_stream(&self) -> Result<CharacterStream<Reader>, Box<dyn Error>>;
-    fn to_character_stream_lossy(&self) -> Result<CharacterStream<Reader>, Box<dyn Error>>;
+    /// Attempt to convert into a [CharacterStream].
+    fn try_to_character_stream(&self) -> Result<CharacterStream<Reader>, Box<dyn Error>>;
+
+    /// Attempt to convert into a lossy [CharacterStream].
+    fn try_to_character_stream_lossy(&self) -> Result<CharacterStream<Reader>, Box<dyn Error>>;
 }
 
 impl TryToCharacterStream<BufReader<File>> for File {
-    fn to_character_stream(&self) -> Result<CharacterStream<BufReader<File>>, Box<dyn Error>> {
+    fn try_to_character_stream(&self) -> Result<CharacterStream<BufReader<File>>, Box<dyn Error>> {
         let file = self.try_clone()?;
         Ok(CharacterStream::from(BufReader::new(file)))
     }
 
-    fn to_character_stream_lossy(
+    fn try_to_character_stream_lossy(
         &self,
     ) -> Result<CharacterStream<BufReader<File>>, Box<dyn Error>> {
         let file = self.try_clone()?;
@@ -246,7 +263,8 @@ mod tests {
                     CharacterStreamResult::Failure(_, _) => unreachable!()
                 },
                 Err(error) => {
-                    if error.kind() == std::io::ErrorKind::UnexpectedEof {
+                    let kind = error.kind();
+                    if kind == std::io::ErrorKind::UnexpectedEof {
                         break;
                     } else {
                         panic!("{}", error)
