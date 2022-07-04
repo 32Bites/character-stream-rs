@@ -34,6 +34,11 @@ impl<Reader: BufRead + Seek> CharacterIterator<Reader> {
     pub fn peek(&mut self) -> Option<CharacterStreamResult> {
         self.stream.peek_char().ok()
     }
+
+    /// Is the character parser lossy?
+    pub fn is_lossy(&self) -> bool {
+        self.stream.is_lossy
+    }
 }
 
 impl<Reader: BufRead + Seek> Iterator for CharacterIterator<Reader> {
