@@ -16,6 +16,40 @@ pub enum CharacterStreamResult {
     Failure(Vec<u8>, Box<dyn Error>),
 }
 
+impl CharacterStreamResult {
+    /// Unwrap a character.
+    pub fn unwrap(self) -> char {
+        match self {
+            Self::Character(character) => character,
+            Self::Failure(_, error) => panic!("Called `CharacterStreamResult::unwrap()` on a `Failure` value {:?}", error)
+        }
+    }
+
+    /// Unwrap a [Failure](Self::Failure) to a tuple.
+    pub fn unwrap_failure(self) -> (Vec<u8>, Box<dyn Error>) {
+        match self {
+            Self::Failure(bytes, error) => (bytes, error),
+            Self::Character(_) => panic!("Called `CharacterStreamResult::unwrap_failure()` on a `Character` value")
+        }
+    }
+
+    /// Unwrap a [Failure](Self::Failure) to it's error.
+    pub fn unwrap_failure_error(self) -> Box<dyn Error> {
+        match self {
+            Self::Failure(_, error) => error,
+            Self::Character(_) => panic!("Called `CharacterStreamResult::unwrap_failure_error()` on a `Character` value")
+        }
+    }
+
+    /// Unwrap a [Failure](Self::Failure) to it's bytes.
+    pub fn unwrap_failure_bytes(self) -> Vec<u8> {
+        match self {
+            Self::Failure(bytes, _) => bytes,
+            Self::Character(_) => panic!("Called `CharacterStreamResult::unwrap_failure_bytes()` on a `Character` value")
+        }
+    }
+}
+
 /// Wrapper struct for any stream that implements [BufRead](std::io::BufRead) and [Seek](std::io::Seek).
 /// 
 /// It allows you to read in bytes from a stream, and attempt to parse them into characters.
