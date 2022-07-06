@@ -1,8 +1,11 @@
-use std::{io::{BufRead, Seek}, error::Error};
+use std::{
+    error::Error,
+    io::{BufRead, Seek},
+};
 
 use crate::{CharacterStream, CharacterStreamResult, ToCharacterStream, TryToCharacterStream};
 /// The maximum amount of [Interrupted](std::io::ErrorKind::Interrupted) errors before the iterator gives up.
-/// 
+///
 /// I know this will not show up in rustdoc, however I do feel as if it should be documented, even if it's within the source code.
 pub const INTERRUPTED_MAXIMUM: usize = 5;
 
@@ -11,13 +14,16 @@ pub struct CharacterIterator<Reader: BufRead + Seek> {
     /// The stream to iterate over.
     pub(crate) stream: CharacterStream<Reader>,
     /// A measure of the amount of [Interrupted](std::io::ErrorKind::Interrupted) errors.
-    pub(crate) interrupted_count: usize
+    pub(crate) interrupted_count: usize,
 }
 
 impl<Reader: BufRead + Seek> CharacterIterator<Reader> {
     /// Create a iterator from a [CharacterStream](crate::CharacterStream)
     pub fn new(stream: CharacterStream<Reader>) -> Self {
-        Self { stream, interrupted_count: 0 }
+        Self {
+            stream,
+            interrupted_count: 0,
+        }
     }
 
     /// Return a reference to the underlying stream.
@@ -52,19 +58,21 @@ impl<Reader: BufRead + Seek> Iterator for CharacterIterator<Reader> {
                 }
 
                 Some(character)
-            },
+            }
             Err(error) => match error.kind() {
-                std::io::ErrorKind::Interrupted => if self.interrupted_count <= INTERRUPTED_MAXIMUM {
-                    self.interrupted_count += 1;
-                    self.next()
-                } else {
-                    None
-                },
+                std::io::ErrorKind::Interrupted => {
+                    if self.interrupted_count <= INTERRUPTED_MAXIMUM {
+                        self.interrupted_count += 1;
+                        self.next()
+                    } else {
+                        None
+                    }
+                }
                 std::io::ErrorKind::UnexpectedEof => None,
                 _ => {
                     println!("An unknown error has occurred: {}", error);
                     None
-                },
+                }
             },
         }
     }

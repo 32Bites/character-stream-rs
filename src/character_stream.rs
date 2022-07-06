@@ -1,69 +1,44 @@
 use std::{
     error::Error,
+    fmt::Display,
     fs::File,
-    io::{BufRead, BufReader, Cursor, Seek, SeekFrom, Error as IoError},
+    io::{BufRead, BufReader, Cursor, Error as IoError, Seek, SeekFrom},
     ops::{Deref, DerefMut},
 };
 
 use crate::CharacterIterator;
 
 /// The output type of a [CharacterStream]'s [read_char](CharacterStream::read_char) method.
-pub enum CharacterStreamResult {
-    /// Successful character parse.
-    Character(char),
-    /// When we fail to parse bytes as a character, but may want to handle the bytes when the error occurs.
-    /// It holds the bytes that caused the error, as well as the corresponding error.
-    Failure(Vec<u8>, Box<dyn Error>),
-}
 
-impl CharacterStreamResult {
-    /// Unwrap a character.
-    pub fn unwrap(self) -> char {
-        match self {
-            Self::Character(character) => character,
-            Self::Failure(_, error) => panic!("Called `CharacterStreamResult::unwrap()` on a `Failure` value {:?}", error)
-        }
-    }
+/// An error that represents a UTF-8 parse failure.
+/// Holds the bytes that it failed to parse, and the corresponding error;
+#[derive(Debug)]
+pub struct CharacterStreamError(Vec<u8>, Box<dyn Error>);
 
-    /// Unwrap a [Failure](Self::Failure) to a tuple.
-    pub fn unwrap_failure(self) -> (Vec<u8>, Box<dyn Error>) {
-        match self {
-            Self::Failure(bytes, error) => (bytes, error),
-            Self::Character(_) => panic!("Called `CharacterStreamResult::unwrap_failure()` on a `Character` value")
-        }
-    }
-
-    /// Unwrap a [Failure](Self::Failure) to it's error.
-    pub fn unwrap_failure_error(self) -> Box<dyn Error> {
-        match self {
-            Self::Failure(_, error) => error,
-            Self::Character(_) => panic!("Called `CharacterStreamResult::unwrap_failure_error()` on a `Character` value")
-        }
-    }
-
-    /// Unwrap a [Failure](Self::Failure) to it's bytes.
-    pub fn unwrap_failure_bytes(self) -> Vec<u8> {
-        match self {
-            Self::Failure(bytes, _) => bytes,
-            Self::Character(_) => panic!("Called `CharacterStreamResult::unwrap_failure_bytes()` on a `Character` value")
-        }
+impl Display for CharacterStreamError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Failed when parsing bytes {:?}: {:?}", self.0, self.1)
     }
 }
 
+impl Error for CharacterStreamError {}
+
+/// A result that contains a parsed character or a [CharacterStreamError].
+pub type CharacterStreamResult = Result<char, CharacterStreamError>;
 /// Wrapper struct for any stream that implements [BufRead](std::io::BufRead) and [Seek](std::io::Seek).
-/// 
+///
 /// It allows you to read in bytes from a stream, and attempt to parse them into characters.
-/// 
+///
 /// These bytes however, must be valid UTF-8 code points.
-/// 
+///
 /// This wrapper does NOT parse graphemes.
 pub struct CharacterStream<Reader: BufRead + Seek> {
     /// The stream from which the incoming bytes are from.
     pub stream: Reader,
     /// Whether or not we should care whether invalid bytes are detected.
-    /// 
+    ///
     /// If `true`, then invalid byte sequences will be replaced with a U+FFFD.
-    /// 
+    ///
     /// If `false`, then [Failure](CharacterStreamResult::Failue) will be the returned result.
     pub is_lossy: bool,
 }
@@ -90,25 +65,25 @@ fn remaining_byte_count(byte: u8) -> Option<usize> {
 
 impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     /// Create a [CharacterStream] from a stream.
-    /// 
+    ///
     /// The created [CharacterStream] will not be lossy.
     pub fn from(stream: Reader) -> Self {
         Self::new(stream, false)
     }
 
     /// Create a [CharacterStream] from a stream.
-    /// 
+    ///
     /// Set `is_lossy` to `true` if you don't want to handle invalid byte sequences.
     pub fn new(stream: Reader, is_lossy: bool) -> Self {
         Self { stream, is_lossy }
     }
 
     /// Reads a set amount of bytes from the stream.
-    /// 
+    ///
     /// Set `up_to` to the amount of bytes you would like to read.
-    /// 
+    ///
     /// Upon success, a [`Vec<u8>`] is returned, holding the read bytes.
-    /// 
+    ///
     /// Upon failure, an [error](std::io::Error) is returned.
     pub fn read_bytes(&mut self, up_to: usize) -> Result<Vec<u8>, IoError> {
         let mut buffer = vec![0u8; up_to];
@@ -138,12 +113,11 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     pub fn peek_byte(&mut self) -> Result<u8, IoError> {
         Ok(self.peek_bytes(1)?[0])
     }
-    
 
     /// Attempts to read a character from the stream.
-    /// 
+    ///
     /// If `is_lossy` is set to `true`, then invalid byte sequences will be a U+FFFD.
-    /// 
+    ///
     /// If `is_lossy` is set to `false`, then invalid byte sequences will be returned in addition to a parse error.
     pub fn read_char(&mut self) -> Result<CharacterStreamResult, IoError> {
         match self.read_byte() {
@@ -158,7 +132,7 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
                         match String::from_utf8(bytes.clone()) {
                             Ok(string) => string,
                             Err(error) => {
-                                return Ok(CharacterStreamResult::Failure(bytes, error.into()))
+                                return Ok(Err(CharacterStreamError(bytes, error.into())))
                             }
                         }
                     }
@@ -168,22 +142,22 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
                     let len = chars.len();
 
                     if len == 1 {
-                        Ok(CharacterStreamResult::Character(chars[0]))
+                        Ok(Ok(chars[0]))
                     } else {
-                        Ok(CharacterStreamResult::Failure(
+                        Ok(Err(CharacterStreamError(
                             bytes,
                             format!("Expected 1 character, not {}", len).into(),
-                        ))
+                        )))
                     }
                 }
                 None => {
                     if self.is_lossy {
-                        Ok(CharacterStreamResult::Character('\u{FFFD}'))
+                        Ok(Ok('\u{FFFD}'))
                     } else {
-                        Ok(CharacterStreamResult::Failure(
+                        Ok(Err(CharacterStreamError(
                             vec![read_byte],
                             "Invalid starting byte".into(),
-                        ))
+                        )))
                     }
                 }
             },
@@ -256,7 +230,6 @@ impl<T: AsRef<[u8]>> ToCharacterStream<Cursor<Vec<u8>>> for T {
     }
 }
 
-
 /// Helper trait for converting values into a [CharacterStream], with a potential for failure.
 pub trait TryToCharacterStream<Reader: BufRead + Seek> {
     /// Attempt to convert into a [CharacterStream].
@@ -293,8 +266,8 @@ mod tests {
         loop {
             match character_stream.read_char() {
                 Ok(result) => match result {
-                    CharacterStreamResult::Character(c) => print!("{}", c),
-                    CharacterStreamResult::Failure(_, _) => unreachable!()
+                    Ok(c) => print!("{}", c),
+                    Err(CharacterStreamError(_, _)) => unreachable!(),
                 },
                 Err(error) => {
                     let kind = error.kind();
