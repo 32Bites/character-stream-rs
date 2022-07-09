@@ -13,7 +13,7 @@ use crate::CharacterIterator;
 /// An error that represents a UTF-8 parse failure.
 /// Holds the bytes that it failed to parse, and the corresponding error;
 #[derive(Debug)]
-pub struct CharacterStreamError(Vec<u8>, Box<dyn Error>);
+pub struct CharacterStreamError(Vec<u8>, Box<dyn Error + Send + Sync>);
 
 impl Display for CharacterStreamError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
