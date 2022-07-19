@@ -2,7 +2,7 @@ use std::{
     error::Error,
     fmt::Display,
     fs::File,
-    io::{BufRead, BufReader, Cursor, Error as IoError, Seek, SeekFrom},
+    io::{BufReader, Cursor, Error as IoError, Read, Seek, SeekFrom},
     ops::{Deref, DerefMut},
 };
 
@@ -32,7 +32,7 @@ pub type CharacterStreamResult = Result<char, CharacterStreamError>;
 /// These bytes however, must be valid UTF-8 code points.
 ///
 /// This wrapper does NOT parse graphemes.
-pub struct CharacterStream<Reader: BufRead + Seek> {
+pub struct CharacterStream<Reader: Read> {
     /// The stream from which the incoming bytes are from.
     pub stream: Reader,
     /// Whether or not we should care whether invalid bytes are detected.
@@ -63,7 +63,7 @@ fn remaining_byte_count(byte: u8) -> Option<usize> {
     Some(count)
 }
 
-impl<Reader: BufRead + Seek> CharacterStream<Reader> {
+impl<Reader: Read> CharacterStream<Reader> {
     /// Create a [CharacterStream] from a stream.
     ///
     /// The created [CharacterStream] will not be lossy.
@@ -95,7 +95,10 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     /// Does exactly what [read_bytes](Self::read_bytes) performs,
     /// the difference being it seeks back to the position before the read,
     /// serving as a lookahead function.
-    pub fn peek_bytes(&mut self, up_to: usize) -> Result<Vec<u8>, IoError> {
+    pub fn peek_bytes(&mut self, up_to: usize) -> Result<Vec<u8>, IoError>
+    where
+        Reader: Seek,
+    {
         let current_position = self.stream_position()?;
         let bytes = self.read_bytes(up_to)?;
         self.seek(SeekFrom::Start(current_position))?;
@@ -110,7 +113,10 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     /// Does exactly what [read_byte](Self::read_byte) performs,
     /// the difference being it seeks back to the position before the read,
     /// serving as a lookahead function.
-    pub fn peek_byte(&mut self) -> Result<u8, IoError> {
+    pub fn peek_byte(&mut self) -> Result<u8, IoError>
+    where
+        Reader: Seek,
+    {
         Ok(self.peek_bytes(1)?[0])
     }
 
@@ -167,7 +173,10 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
 
     /// Performs the same action as [read_char](Self::read_char), the difference being,
     /// it seeks back to the position prior to the read.
-    pub fn peek_char(&mut self) -> Result<CharacterStreamResult, IoError> {
+    pub fn peek_char(&mut self) -> Result<CharacterStreamResult, IoError>
+    where
+        Reader: Seek,
+    {
         let current_position = self.stream_position()?;
         let result = self.read_char();
         self.seek(SeekFrom::Start(current_position))?;
@@ -176,7 +185,7 @@ impl<Reader: BufRead + Seek> CharacterStream<Reader> {
     }
 }
 
-impl<Reader: BufRead + Seek> Deref for CharacterStream<Reader> {
+impl<Reader: Read> Deref for CharacterStream<Reader> {
     type Target = Reader;
 
     fn deref(&self) -> &Self::Target {
@@ -184,25 +193,25 @@ impl<Reader: BufRead + Seek> Deref for CharacterStream<Reader> {
     }
 }
 
-impl<Reader: BufRead + Seek> DerefMut for CharacterStream<Reader> {
+impl<Reader: Read> DerefMut for CharacterStream<Reader> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
 }
 
-impl<Reader: BufRead + Seek> AsRef<Reader> for CharacterStream<Reader> {
+impl<Reader: Read> AsRef<Reader> for CharacterStream<Reader> {
     fn as_ref(&self) -> &Reader {
         &self.stream
     }
 }
 
-impl<Reader: BufRead + Seek> AsMut<Reader> for CharacterStream<Reader> {
+impl<Reader: Read> AsMut<Reader> for CharacterStream<Reader> {
     fn as_mut(&mut self) -> &mut Reader {
         &mut self.stream
     }
 }
 
-impl<Reader: BufRead + Seek> IntoIterator for CharacterStream<Reader> {
+impl<Reader: Read> IntoIterator for CharacterStream<Reader> {
     type Item = CharacterStreamResult;
     type IntoIter = CharacterIterator<Reader>;
 
@@ -212,7 +221,7 @@ impl<Reader: BufRead + Seek> IntoIterator for CharacterStream<Reader> {
 }
 
 /// Helper trait for converting values into a [CharacterStream].
-pub trait ToCharacterStream<Reader: BufRead + Seek> {
+pub trait ToCharacterStream<Reader: Read> {
     /// Convert into a [CharacterStream].
     fn to_character_stream(&self) -> CharacterStream<Reader>;
 
@@ -231,7 +240,7 @@ impl<T: AsRef<[u8]>> ToCharacterStream<Cursor<Vec<u8>>> for T {
 }
 
 /// Helper trait for converting values into a [CharacterStream], with a potential for failure.
-pub trait TryToCharacterStream<Reader: BufRead + Seek> {
+pub trait TryToCharacterStream<Reader: Read> {
     /// Attempt to convert into a [CharacterStream].
     fn try_to_character_stream(&self) -> Result<CharacterStream<Reader>, Box<dyn Error>>;
 

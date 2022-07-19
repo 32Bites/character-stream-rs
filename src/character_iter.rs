@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    io::{BufRead, Seek},
+    io::{Read, Seek},
 };
 
 use crate::{CharacterStream, CharacterStreamResult, ToCharacterStream, TryToCharacterStream};
@@ -10,14 +10,14 @@ use crate::{CharacterStream, CharacterStreamResult, ToCharacterStream, TryToChar
 pub const INTERRUPTED_MAXIMUM: usize = 5;
 
 /// Iterator over a [CharacterStream](crate::CharacterStream)
-pub struct CharacterIterator<Reader: BufRead + Seek> {
+pub struct CharacterIterator<Reader: Read> {
     /// The stream to iterate over.
     pub(crate) stream: CharacterStream<Reader>,
     /// A measure of the amount of [Interrupted](std::io::ErrorKind::Interrupted) errors.
     pub(crate) interrupted_count: usize,
 }
 
-impl<Reader: BufRead + Seek> CharacterIterator<Reader> {
+impl<Reader: Read> CharacterIterator<Reader> {
     /// Create a iterator from a [CharacterStream](crate::CharacterStream)
     pub fn new(stream: CharacterStream<Reader>) -> Self {
         Self {
@@ -37,7 +37,10 @@ impl<Reader: BufRead + Seek> CharacterIterator<Reader> {
     }
 
     /// Peek a character from the stream.
-    pub fn peek(&mut self) -> Option<CharacterStreamResult> {
+    pub fn peek(&mut self) -> Option<CharacterStreamResult>
+    where
+        Reader: Seek,
+    {
         self.stream.peek_char().ok()
     }
 
@@ -47,7 +50,7 @@ impl<Reader: BufRead + Seek> CharacterIterator<Reader> {
     }
 }
 
-impl<Reader: BufRead + Seek> Iterator for CharacterIterator<Reader> {
+impl<Reader: Read> Iterator for CharacterIterator<Reader> {
     type Item = CharacterStreamResult;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -79,7 +82,7 @@ impl<Reader: BufRead + Seek> Iterator for CharacterIterator<Reader> {
 }
 
 /// Trait for easy conversion of a type into a [CharacterIterator].
-pub trait ToCharacterIterator<Reader: BufRead + Seek> {
+pub trait ToCharacterIterator<Reader: Read> {
     /// Convert into a [CharacterIterator].
     fn to_character_iterator(&self) -> CharacterIterator<Reader>;
 
@@ -87,7 +90,7 @@ pub trait ToCharacterIterator<Reader: BufRead + Seek> {
     fn to_character_iterator_lossy(&self) -> CharacterIterator<Reader>;
 }
 
-impl<Reader: BufRead + Seek, T: ToCharacterStream<Reader>> ToCharacterIterator<Reader> for T {
+impl<Reader: Read, T: ToCharacterStream<Reader>> ToCharacterIterator<Reader> for T {
     fn to_character_iterator(&self) -> CharacterIterator<Reader> {
         self.to_character_stream().into_iter()
     }
@@ -98,7 +101,7 @@ impl<Reader: BufRead + Seek, T: ToCharacterStream<Reader>> ToCharacterIterator<R
 }
 
 /// Trait for easy conversion of a type into a [CharacterIterator] with a potential for failure.
-pub trait TryToCharacterIterator<Reader: BufRead + Seek> {
+pub trait TryToCharacterIterator<Reader: Read> {
     /// Attempt to convert into a [CharacterIterator].
     fn try_to_character_iterator(&self) -> Result<CharacterIterator<Reader>, Box<dyn Error>>;
 
@@ -106,7 +109,7 @@ pub trait TryToCharacterIterator<Reader: BufRead + Seek> {
     fn try_to_character_iterator_lossy(&self) -> Result<CharacterIterator<Reader>, Box<dyn Error>>;
 }
 
-impl<Reader: BufRead + Seek, T: TryToCharacterStream<Reader>> TryToCharacterIterator<Reader> for T {
+impl<Reader: Read, T: TryToCharacterStream<Reader>> TryToCharacterIterator<Reader> for T {
     fn try_to_character_iterator(&self) -> Result<CharacterIterator<Reader>, Box<dyn Error>> {
         Ok(self.try_to_character_stream()?.into_iter())
     }
