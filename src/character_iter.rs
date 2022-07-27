@@ -50,6 +50,12 @@ impl<Reader: Read> CharacterIterator<Reader> {
     }
 }
 
+impl<Reader: Read + std::fmt::Debug> std::fmt::Debug for CharacterIterator<Reader> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CharacterIterator").field("stream", &self.stream).field("interrupted_count", &self.interrupted_count).finish()
+    }
+}
+
 impl<Reader: Read> Iterator for CharacterIterator<Reader> {
     type Item = CharacterStreamResult;
 

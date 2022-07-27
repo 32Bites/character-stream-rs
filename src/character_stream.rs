@@ -185,6 +185,12 @@ impl<Reader: Read> CharacterStream<Reader> {
     }
 }
 
+impl<Reader: std::fmt::Debug + Read> std::fmt::Debug for CharacterStream<Reader> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CharacterStream").field("stream", &self.stream).field("is_lossy", &self.is_lossy).finish()
+    }
+}
+
 impl<Reader: Read> Deref for CharacterStream<Reader> {
     type Target = Reader;
 
