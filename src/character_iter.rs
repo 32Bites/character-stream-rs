@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    io::{Read, Seek},
+    io::{Read, Seek}, iter::FusedIterator,
 };
 
 use crate::{CharacterStream, CharacterStreamResult, ToCharacterStream, TryToCharacterStream};
@@ -86,6 +86,8 @@ impl<Reader: Read> Iterator for CharacterIterator<Reader> {
         }
     }
 }
+
+impl<Reader: Read> FusedIterator for CharacterIterator<Reader> {}
 
 /// Trait for easy conversion of a type into a [CharacterIterator].
 pub trait ToCharacterIterator<Reader: Read> {

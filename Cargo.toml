@@ -1,6 +1,6 @@
 [package]
 name = "character-stream"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 author = "Noah Shanaberger <noah@thenoah.party>"
 description = "Helper data structures for reading UTF-8 characters from a stream."
