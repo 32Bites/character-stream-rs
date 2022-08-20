@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::anyhow;
 
-use crate::{CharacterError, CharacterIterator, MultiPeek, Peek};
+use crate::{CharacterError, CharacterIterator, MultiPeek, Peek, INTERRUPTED_MAX};
 
 pub trait Peekable<T> {
     fn peek(&mut self) -> Option<&T>;
@@ -382,7 +382,7 @@ impl<Reader: Read> IntoIterator for CharacterStream<Reader> {
     type IntoIter = CharacterIterator<Self>;
 
     fn into_iter(self) -> Self::IntoIter {
-        CharacterIterator::new(self)
+        CharacterIterator::new(self, INTERRUPTED_MAX)
     }
 }
 
@@ -392,7 +392,7 @@ impl<Reader: Read> IntoIterator for PeekableCharacterStream<Reader, Peek> {
     type IntoIter = CharacterIterator<Self>;
 
     fn into_iter(self) -> Self::IntoIter {
-        CharacterIterator::new(self)
+        CharacterIterator::new(self, INTERRUPTED_MAX)
     }
 }
 
@@ -402,7 +402,7 @@ impl<Reader: Read> IntoIterator for PeekableCharacterStream<Reader, MultiPeek> {
     type IntoIter = CharacterIterator<Self>;
 
     fn into_iter(self) -> Self::IntoIter {
-        CharacterIterator::new(self)
+        CharacterIterator::new(self, INTERRUPTED_MAX)
     }
 }
 

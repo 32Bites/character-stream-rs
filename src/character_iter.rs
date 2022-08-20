@@ -1,31 +1,28 @@
-use std::{error::Error, io::Read, iter::FusedIterator};
+use std::{error::Error, io::Read};
 
 use crate::{
     CharStream, CharacterStream, CharacterStreamResult, MultiPeek, MultiPeekable, Peek, Peekable,
     PeekableCharacterStream, ToCharacterStream, TryToCharacterStream,
 };
-/// The maximum amount of [Interrupted](std::io::ErrorKind::Interrupted) errors before the iterator gives up.
-///
-/// I know this will not show up in rustdoc, however I do feel as if it should be documented, even if it's within the source code.
-pub const INTERRUPTED_MAXIMUM: usize = 5;
+
+pub(crate) const INTERRUPTED_MAX: usize = 5;
 
 /// Iterator over a [CharacterStream](crate::CharacterStream)
 pub struct CharacterIterator<Stream: CharStream> {
     /// The stream to iterate over.
     pub(crate) stream: Stream,
-    /// A measure of the amount of [Interrupted](std::io::ErrorKind::Interrupted) errors.
-    pub(crate) interrupted_count: usize,
-    /// Whether or not we're done reading characters.
-    pub(crate) done: bool,
+    /// Maximum amount of [Interrupted](std::io::ErrorKind::Interrupted) errors.
+    pub(crate) interrupted_max: usize,
+    pub(crate) interrupted_count: usize
 }
 
 impl<Stream: CharStream> CharacterIterator<Stream> {
     /// Create a iterator from a [CharacterStream](crate::CharacterStream)
-    pub fn new(stream: Stream) -> Self {
+    pub fn new(stream: Stream, interrupted_max: usize) -> Self {
         Self {
             stream,
-            interrupted_count: 0,
-            done: false,
+            interrupted_max,
+            interrupted_count: 0
         }
     }
 
@@ -48,20 +45,12 @@ impl<Stream: CharStream> CharacterIterator<Stream> {
 impl<Reader: Read> CharacterIterator<CharacterStream<Reader>> {
     /// Make the underlying stream peekable.
     pub fn peek(self) -> CharacterIterator<PeekableCharacterStream<Reader, Peek>> {
-        CharacterIterator {
-            stream: self.stream.peeky(),
-            interrupted_count: self.interrupted_count,
-            done: self.done,
-        }
+        CharacterIterator::new(self.stream.peeky(), self.interrupted_max)
     }
 
     /// Make the underlying stream multi-peekable
     pub fn peek_multi(self) -> CharacterIterator<PeekableCharacterStream<Reader, MultiPeek>> {
-        CharacterIterator {
-            stream: self.stream.peeky_multi(),
-            interrupted_count: self.interrupted_count,
-            done: self.done,
-        }
+        CharacterIterator::new(self.stream.peeky_multi(), self.interrupted_max)
     }
 }
 
@@ -85,10 +74,7 @@ impl<Reader: Read> CharacterIterator<PeekableCharacterStream<Reader, MultiPeek>>
 
 impl<Stream: CharStream + std::fmt::Debug> std::fmt::Debug for CharacterIterator<Stream> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CharacterIterator")
-            .field("stream", &self.stream)
-            .field("interrupted_count", &self.interrupted_count)
-            .finish()
+        write!(f, "{:?}", self)
     }
 }
 
@@ -96,9 +82,6 @@ impl<Stream: CharStream> Iterator for CharacterIterator<Stream> {
     type Item = CharacterStreamResult;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
-            return None;
-        }
         match self.stream.read_char() {
             Ok(character) => {
                 if self.interrupted_count > 0 {
@@ -108,25 +91,20 @@ impl<Stream: CharStream> Iterator for CharacterIterator<Stream> {
                 Some(Ok(character))
             }
             Err(error) => match error {
-                crate::CharacterError::NoBytesRead => {
-                    self.done = true;
-                    None
-                }
+                crate::CharacterError::NoBytesRead => None,
                 crate::CharacterError::IoError {
                     bytes: _,
                     error: ref err,
                 } => match err.kind() {
                     std::io::ErrorKind::Interrupted => {
-                        if self.interrupted_count <= INTERRUPTED_MAXIMUM {
+                        if self.interrupted_count <= self.interrupted_max {
                             self.interrupted_count += 1;
                             self.next()
                         } else {
-                            self.done = true;
                             None
                         }
                     }
                     std::io::ErrorKind::UnexpectedEof => {
-                        self.done = true;
                         None
                     }
                     _ => Some(Err(error)),
@@ -137,7 +115,7 @@ impl<Stream: CharStream> Iterator for CharacterIterator<Stream> {
     }
 }
 
-impl<Stream: CharStream> FusedIterator for CharacterIterator<Stream> {}
+// impl<Stream: CharStream> FusedIterator for CharacterIterator<Stream> {}
 
 /// Trait for easy conversion of a type into a [CharacterIterator].
 pub trait ToCharacterIterator<Reader: Read> {
