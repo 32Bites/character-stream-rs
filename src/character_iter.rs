@@ -13,7 +13,7 @@ pub struct CharacterIterator<Stream: CharStream> {
     pub(crate) stream: Stream,
     /// Maximum amount of [Interrupted](std::io::ErrorKind::Interrupted) errors.
     pub(crate) interrupted_max: usize,
-    pub(crate) interrupted_count: usize
+    pub interrupted_count: usize
 }
 
 impl<Stream: CharStream> CharacterIterator<Stream> {

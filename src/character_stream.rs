@@ -237,8 +237,8 @@ impl<Reader: Read> From<Reader> for CharacterStream<Reader> {
 
 pub struct PeekableCharacterStream<Reader: Read, PI> {
     pub stream: CharacterStream<Reader>,
-    buffer: VecDeque<CharacterStreamResult>,
-    position: usize,
+    pub buffer: VecDeque<CharacterStreamResult>,
+    pub position: usize,
     _phantom: PhantomData<PI>,
 }
 
