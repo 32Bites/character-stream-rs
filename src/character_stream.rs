@@ -149,22 +149,16 @@ impl<Reader: Read> CharStream for CharacterStream<Reader> {
                     if remaining_count > 0 {
                         bytes.extend(self.read_bytes(remaining_count)?);
                     }
-
-                    let chars: Vec<char> = if self.is_lossy {
-                        String::from_utf8_lossy(&bytes).to_string()
-                    } else {
-                        match String::from_utf8(bytes.clone()) {
-                            Ok(string) => string,
-                            Err(error) => {
-                                return Err(CharacterError::Other {
-                                    bytes,
-                                    error: anyhow!(error),
-                                })
-                            }
+                    let chars: Vec<char> = match simdutf8::basic::from_utf8(&bytes) {
+                        Ok(string) => string.chars().collect(),
+                        Err(_) if self.is_lossy => vec!['\u{FFFD}'],
+                        Err(error) => {
+                            return Err(CharacterError::Other {
+                                bytes,
+                                error: anyhow!(error),
+                            })
                         }
-                    }
-                    .chars()
-                    .collect();
+                    };
 
                     let len = chars.len();
 
@@ -260,7 +254,7 @@ impl<Reader: Read, PI> PeekableCharacterStream<Reader, PI> {
             _phantom: PhantomData,
         }
     }
-    
+
     #[inline]
     fn _read_char(&mut self) -> CharacterStreamResult {
         self.buffer

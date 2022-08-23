@@ -15,3 +15,13 @@ pub enum CharacterError {
         error: anyhow::Error,
     },
 }
+
+impl CharacterError {
+    pub fn bytes(&self) -> Option<&[u8]> {
+        match self {
+            CharacterError::NoBytesRead => None,
+            CharacterError::Other { bytes, error: _ }
+            | CharacterError::IoError { bytes, error: _ } => Some(&bytes),
+        }
+    }
+}
